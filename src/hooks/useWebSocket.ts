@@ -58,9 +58,10 @@ export interface UseWebSocketOptions {
   onReasoning?: (data: ReasoningUpdate) => void;
 }
 
-export function useWebSocket(options: UseWebSocketOptions) {
-  const { roundId, onTick: onTickCallback, onTrade: onTradeCallback, onLeaderboard: onLeaderboardCallback, onReasoning: onReasoningCallback } = options;
+export function useWebSocket(options?: UseWebSocketOptions) {
+  const { roundId, onTick: onTickCallback, onTrade: onTradeCallback, onLeaderboard: onLeaderboardCallback, onReasoning: onReasoningCallback } = options || {};
   const [isConnected, setIsConnected] = useState(false);
+  const [socket, setSocket] = useState<ReturnType<typeof getSocket> | null>(null);
 
   const {
     setTickData,
@@ -88,8 +89,6 @@ export function useWebSocket(options: UseWebSocketOptions) {
   });
 
   useEffect(() => {
-    if (!roundId) return;
-
     connectionRefCount++;
     const isFirstConnection = connectionRefCount === 1;
 
@@ -97,7 +96,37 @@ export function useWebSocket(options: UseWebSocketOptions) {
       connect();
     }
 
-    const socket = getSocket();
+    const socketInstance = getSocket();
+    setSocket(socketInstance);
+
+    // If no roundId, just maintain connection for raw socket access
+    if (!roundId) {
+      const handleConnect = () => {
+        setIsConnected(true);
+        setStoreConnected(true);
+      };
+      const handleDisconnect = () => {
+        setIsConnected(false);
+        setStoreConnected(false);
+      };
+
+      if (socketInstance.connected) {
+        handleConnect();
+      }
+      socketInstance.on("connect", handleConnect);
+      socketInstance.on("disconnect", handleDisconnect);
+
+      return () => {
+        socketInstance.off("connect", handleConnect);
+        socketInstance.off("disconnect", handleDisconnect);
+        connectionRefCount--;
+        if (connectionRefCount === 0) {
+          disconnect();
+        }
+      };
+    }
+
+    const socket = socketInstance;
     let eventHandlersSetup = false;
 
     const setupConnection = () => {
@@ -196,5 +225,5 @@ export function useWebSocket(options: UseWebSocketOptions) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roundId]);
 
-  return { isConnected };
+  return { isConnected, socket };
 }

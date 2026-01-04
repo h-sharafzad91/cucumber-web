@@ -195,6 +195,62 @@ npm run build
 npm start
 ```
 
+## Railway Deployment
+
+### 1. Connect Repository
+1. Go to [Railway](https://railway.app) and create a new project
+2. Select "Deploy from GitHub repo"
+3. Connect `h-sharafzad91/cucumber-web`
+
+### 2. Configure Environment Variables
+In Railway dashboard, add these variables:
+
+| Variable | Value | Description |
+|----------|-------|-------------|
+| `NEXT_PUBLIC_API_URL` | `https://cucumber-cerebellum-production.up.railway.app` | Your Cerebellum Railway URL |
+| `NEXT_PUBLIC_WS_URL` | `wss://cucumber-cerebellum-production.up.railway.app` | WebSocket URL (same as API, with wss://) |
+
+### 3. Build Settings
+Railway auto-detects Next.js. Verify these settings:
+- **Build Command**: `npm run build`
+- **Start Command**: `npm start`
+- **Watch Paths**: Leave default
+
+### 4. Domain Setup
+1. Go to Settings → Domains
+2. Click "Generate Domain" for a `*.up.railway.app` subdomain
+3. Or add a custom domain like `app.cucumber.trade`
+
+### Railway Architecture
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    RAILWAY PROJECT                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌─────────────────┐    ┌─────────────────┐                │
+│  │  cucumber-web   │    │ cucumber-admin  │                │
+│  │   (Next.js)     │    │   (Next.js)     │                │
+│  │  Service #1     │    │   Service #4    │                │
+│  └────────┬────────┘    └────────┬────────┘                │
+│           │                      │                          │
+│           └──────────┬───────────┘                          │
+│                      ▼                                       │
+│           ┌─────────────────┐                               │
+│           │cucumber-cerebellum│                              │
+│           │   (Node.js)     │                               │
+│           │   Service #2    │                               │
+│           └────────┬────────┘                               │
+│                    │                                         │
+│        ┌───────────┼───────────┐                            │
+│        ▼           ▼           ▼                            │
+│  ┌──────────┐ ┌──────────┐ ┌─────────────────┐             │
+│  │PostgreSQL│ │  Redis   │ │ cucumber-cortex │             │
+│  │ (Plugin) │ │ (Plugin) │ │   (Python)      │             │
+│  └──────────┘ └──────────┘ │   Service #3    │             │
+│                             └─────────────────┘             │
+└─────────────────────────────────────────────────────────────┘
+```
+
 ## Related Repositories
 
 | Repository | Description | Port |

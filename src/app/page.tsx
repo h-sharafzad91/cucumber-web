@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { getRounds, getActiveRound, getAgents, getParticipants, joinRound } from '@/lib/api';
+import { getRounds, getActiveRounds, getAgents, getParticipants, joinRound } from '@/lib/api';
 import { useWallet } from '@/hooks/useWallet';
 import { PrizePoolCard } from '@/components/arena/PrizePoolCard';
 import type { Round } from '@/types';
@@ -30,7 +30,7 @@ function formatTickInterval(seconds: number): string {
 }
 
 export default function Home() {
-  const [activeRound, setActiveRound] = useState<Round | null>(null);
+  const [activeRounds, setActiveRounds] = useState<Round[]>([]);
   const [allRounds, setAllRounds] = useState<Round[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,12 +103,12 @@ export default function Home() {
   async function fetchData() {
     try {
       const [activeRes, roundsRes, agentsRes] = await Promise.all([
-        getActiveRound(),
+        getActiveRounds(),
         getRounds(),
         getAgents(address || undefined),
       ]);
 
-      setActiveRound(activeRes.round);
+      setActiveRounds(activeRes.rounds || []);
       setAgents(agentsRes.agents);
       setAllRounds(roundsRes.rounds);
     } catch (err) {
@@ -171,53 +171,60 @@ export default function Home() {
         </p>
       </div>
 
-      {activeRound && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-gray-800 rounded-lg p-6 border border-primary-500">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <span className="text-primary-400 text-sm font-medium">LIVE NOW</span>
-                <h2 className="text-2xl font-bold">{activeRound.name}</h2>
-              </div>
-              <Link
-                href={`/arena/${activeRound.id}`}
-                className="bg-primary-600 hover:bg-primary-700 px-6 py-2 rounded-lg font-medium transition"
-              >
-                Watch Live
-              </Link>
-            </div>
-            <div className="grid grid-cols-3 gap-4 text-sm">
-              <div>
-                <span className="text-gray-400">Type</span>
-                <p className="font-medium capitalize">{activeRound.arena_type || 'Tournament'}</p>
-              </div>
-              <div>
-                <span className="text-gray-400">Participants</span>
-                <p className="font-medium">
-                  {activeRound.current_participants || 0}
-                  {activeRound.max_participants ? ` / ${activeRound.max_participants}` : ''}
-                </p>
-              </div>
-              <div>
-                <span className="text-gray-400">Started</span>
-                <p className="font-medium">
-                  {activeRound.start_time
-                    ? new Date(activeRound.start_time).toLocaleTimeString()
-                    : '-'}
-                </p>
-              </div>
-            </div>
-          </div>
+      {activeRounds.length > 0 && (
+        <div>
+          <h2 className="text-xl font-semibold mb-4">Live Arenas</h2>
+          <div className="space-y-4">
+            {activeRounds.map((activeRound) => (
+              <div key={activeRound.id} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 bg-gray-800 rounded-lg p-6 border border-primary-500">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <span className="text-primary-400 text-sm font-medium">LIVE NOW</span>
+                      <h2 className="text-2xl font-bold">{activeRound.name}</h2>
+                    </div>
+                    <Link
+                      href={`/arena/${activeRound.id}`}
+                      className="bg-primary-600 hover:bg-primary-700 px-6 py-2 rounded-lg font-medium transition"
+                    >
+                      Watch Live
+                    </Link>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-400">Type</span>
+                      <p className="font-medium capitalize">{activeRound.arena_type || 'Tournament'}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-400">Participants</span>
+                      <p className="font-medium">
+                        {activeRound.current_participants || 0}
+                        {activeRound.max_participants ? ` / ${activeRound.max_participants}` : ''}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-gray-400">Started</span>
+                      <p className="font-medium">
+                        {activeRound.start_time
+                          ? new Date(activeRound.start_time).toLocaleTimeString()
+                          : '-'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
-          <PrizePoolCard
-            prizePoolSeed={activeRound.prize_pool_seed}
-            buyInFee={activeRound.buy_in_fee}
-            currentParticipants={activeRound.current_participants}
-            maxParticipants={activeRound.max_participants}
-            protocolFeePercent={activeRound.protocol_fee_percent}
-            currentPoolSize={activeRound.current_pool_size}
-            payoutStructure={activeRound.payout_structure}
-          />
+                <PrizePoolCard
+                  prizePoolSeed={activeRound.prize_pool_seed}
+                  buyInFee={activeRound.buy_in_fee}
+                  currentParticipants={activeRound.current_participants}
+                  maxParticipants={activeRound.max_participants}
+                  protocolFeePercent={activeRound.protocol_fee_percent}
+                  currentPoolSize={activeRound.current_pool_size}
+                  payoutStructure={activeRound.payout_structure}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

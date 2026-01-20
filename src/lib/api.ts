@@ -104,6 +104,10 @@ export async function getActiveRound() {
   return fetchAPI<{ round: any | null }>("/v1/rounds/active");
 }
 
+export async function getActiveRounds() {
+  return fetchAPI<{ rounds: any[] }>("/v1/rounds/active-all");
+}
+
 export async function createRound(data: {
   name?: string;
   settings?: any;

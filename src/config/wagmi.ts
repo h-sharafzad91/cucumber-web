@@ -26,7 +26,7 @@ export const chains: [AppKitNetwork, ...AppKitNetwork[]] = [baseSepolia];
 export const wagmiAdapter = new WagmiAdapter({
   storage: createStorage({
     storage: cookieStorage,
-  }),
+  }) as any,
   ssr: true,
   projectId,
   networks: chains,

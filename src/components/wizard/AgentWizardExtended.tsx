@@ -54,7 +54,7 @@ export function AgentWizardExtended({ onSubmit, loading }: AgentWizardExtendedPr
   const [stopLossClosePercent, setStopLossClosePercent] = useState(100);
   const [takeProfitPercent, setTakeProfitPercent] = useState(10);
   const [takeProfitClosePercent, setTakeProfitClosePercent] = useState(50);
-  const [tickInterval, setTickInterval] = useState(30);
+  const [tickInterval, setTickInterval] = useState(300);
 
   const [goal, setGoal] = useState('');
   const [description, setDescription] = useState('');
@@ -236,13 +236,13 @@ export function AgentWizardExtended({ onSubmit, loading }: AgentWizardExtendedPr
             </div>
             <input
               type="number"
-              min={1}
+              min={300}
               value={tickInterval}
-              onChange={(e) => setTickInterval(Math.max(1, Number(e.target.value)))}
+              onChange={(e) => setTickInterval(Math.max(300, Number(e.target.value)))}
               className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-primary-500"
             />
             <div className="grid grid-cols-5 gap-2">
-              {[30, 60, 300, 600, 3600].map((val) => (
+              {[300, 600, 900, 1800, 3600].map((val) => (
                 <button
                   key={val}
                   type="button"

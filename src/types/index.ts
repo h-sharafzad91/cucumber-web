@@ -6,6 +6,7 @@ export interface Agent {
   worker_config: WorkerConfig;
   mmr: number;
   is_locked?: boolean;
+  is_active?: boolean;
   tick_interval?: number;
   leverage?: number;
   stop_loss_percent?: number;

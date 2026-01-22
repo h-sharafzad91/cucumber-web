@@ -63,20 +63,6 @@ export async function createAgent(data: {
   });
 }
 
-export async function activateAgent(id: string) {
-  return fetchAPI<{ agent: any }>(`/v1/agents/${id}/activate`, {
-    method: "POST",
-    body: JSON.stringify({}),
-  });
-}
-
-export async function deactivateAgent(id: string) {
-  return fetchAPI<{ agent: any }>(`/v1/agents/${id}/deactivate`, {
-    method: "POST",
-    body: JSON.stringify({}),
-  });
-}
-
 export async function updateAgent(id: string, data: any) {
   return fetchAPI<{ agent: any }>(`/v1/agents/${id}`, {
     method: "PUT",
@@ -231,8 +217,9 @@ export async function getAllReasoning(roundId: string, agentIds: string[]) {
   return { reasoning: allReasoning };
 }
 
-export async function getMarketPrice() {
-  return fetchAPI<{ price: number; source: string; timestamp: string }>("/v1/market/price");
+export async function getMarketPrice(tradingPair?: string) {
+  const params = tradingPair ? `?trading_pair=${encodeURIComponent(tradingPair)}` : '';
+  return fetchAPI<{ price: number; source: string; trading_pair: string; timestamp: string }>(`/v1/market/price${params}`);
 }
 
 export interface TradePagination {
@@ -309,4 +296,25 @@ export async function getAgentLiveStats(agentId: string, roundId: string) {
     realized_pnl: number;
     positions: any[];
   }>(`/v1/leaderboard/${roundId}/agent/${agentId}/live`);
+}
+
+export interface PerformanceDataPoint {
+  tick_number: number;
+  timestamp: string;
+  realized_pnl: number;
+  pnl_impact: number;
+  balance: number;
+  portfolio_value: number;
+  action: string;
+  asset?: string;
+  size_usd?: number;
+}
+
+export async function getAgentPerformanceHistory(roundId: string, agentId: string) {
+  return fetchAPI<{
+    performance: PerformanceDataPoint[];
+    initial_balance: number;
+    current_balance: number;
+    total_pnl: number;
+  }>(`/v1/arena/${roundId}/performance/${agentId}`);
 }

@@ -1,17 +1,24 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 
 interface DataPoint {
+  tick_number: number;
   timestamp: string;
-  value: number;
-  pnl: number;
+  realized_pnl: number;
+  pnl_impact: number;
+  balance: number;
+  portfolio_value: number;
+  action: string;
+  asset?: string;
+  size_usd?: number;
 }
 
 interface PerformanceChartProps {
   data: DataPoint[];
   initialBalance: number;
+  agentName?: string;
   height?: number;
   showLabels?: boolean;
   className?: string;
@@ -20,52 +27,98 @@ interface PerformanceChartProps {
 export function PerformanceChart({
   data,
   initialBalance,
-  height = 120,
+  agentName,
+  height = 160,
   showLabels = true,
   className,
 }: PerformanceChartProps) {
+  const [hoveredPoint, setHoveredPoint] = useState<DataPoint | null>(null);
+  const [hoverPosition, setHoverPosition] = useState<{ x: number; y: number } | null>(null);
+
   const chartData = useMemo(() => {
-    if (data.length === 0) {
+    // Use all ticks (including HOLD)
+    const allTicks = data;
+    const tradeData = data.filter((d) => d.action !== 'HOLD');
+
+    if (allTicks.length === 0) {
       return {
-        points: `0,${height / 2}`,
-        minValue: initialBalance,
-        maxValue: initialBalance,
+        points: [],
+        allTicks: [],
+        tradeData: [],
+        pathD: "",
+        areaD: "",
+        minPnl: 0,
+        maxPnl: 0,
         currentValue: initialBalance,
-        totalPnl: 0,
-        returnPercent: 0,
+        currentPnl: 0,
+        totalReturn: 0,
         isPositive: true,
+        zeroY: height / 2,
       };
     }
 
-    const values = data.map((d) => d.value);
-    const minValue = Math.min(...values, initialBalance);
-    const maxValue = Math.max(...values, initialBalance);
-    const range = maxValue - minValue || 1;
+    // Use realized_pnl for Y-axis (profit/loss)
+    const pnlValues = allTicks.map((d) => d.realized_pnl || 0);
+    const minPnl = Math.min(...pnlValues);
+    const maxPnl = Math.max(...pnlValues);
 
-    const padding = 10;
-    const chartHeight = height - padding * 2;
-    const chartWidth = 100;
+    // Make range symmetric around zero so zero line is centered
+    const absMax = Math.max(Math.abs(minPnl), Math.abs(maxPnl), 100); // minimum range of $100
+    const symmetricMin = -absMax;
+    const symmetricMax = absMax;
+    const range = symmetricMax - symmetricMin;
 
-    const points = data
-      .map((d, i) => {
-        const x = (i / Math.max(data.length - 1, 1)) * chartWidth;
-        const y = padding + chartHeight - ((d.value - minValue) / range) * chartHeight;
-        return `${x},${y}`;
-      })
-      .join(" ");
+    const padding = { top: 15, bottom: 15, left: 10, right: 10 };
+    const chartHeight = height - padding.top - padding.bottom;
+    const viewBoxWidth = 400;
+    const chartWidth = viewBoxWidth - padding.left - padding.right;
 
-    const currentValue = data[data.length - 1]?.value || initialBalance;
-    const totalPnl = currentValue - initialBalance;
-    const returnPercent = ((currentValue - initialBalance) / initialBalance) * 100;
+    // Zero line Y position (center)
+    const zeroY = padding.top + chartHeight / 2;
+
+    // Create points for ALL ticks
+    const points = allTicks.map((d, i) => {
+      const pnl = d.realized_pnl || 0;
+      const x = padding.left + (i / Math.max(allTicks.length - 1, 1)) * chartWidth;
+
+      // HOLD actions show on zero line, BUY/SELL show at their realized PnL
+      const isHold = d.action === 'HOLD';
+      const y = isHold
+        ? zeroY
+        : padding.top + chartHeight - ((pnl - symmetricMin) / range) * chartHeight;
+
+      return { x, y, data: d, isHold };
+    });
+
+    // Create path only through non-HOLD points (trades)
+    const tradePoints = points.filter(p => !p.isHold);
+    const pathD = tradePoints.length > 1
+      ? tradePoints.map((p, i) => (i === 0 ? `M ${p.x},${p.y}` : `L ${p.x},${p.y}`)).join(" ")
+      : "";
+
+    // Area fill from the line to zero
+    const areaD = tradePoints.length > 1
+      ? `${pathD} L ${tradePoints[tradePoints.length - 1].x},${zeroY} L ${tradePoints[0].x},${zeroY} Z`
+      : "";
+
+    const lastTick = allTicks[allTicks.length - 1];
+    const currentPnl = lastTick?.realized_pnl || 0;
+    const currentValue = lastTick?.portfolio_value || lastTick?.balance || initialBalance;
+    const totalReturn = (currentPnl / initialBalance) * 100;
 
     return {
       points,
-      minValue,
-      maxValue,
+      allTicks,
+      tradeData,
+      pathD,
+      areaD,
+      minPnl: symmetricMin,
+      maxPnl: symmetricMax,
       currentValue,
-      totalPnl,
-      returnPercent,
-      isPositive: totalPnl >= 0,
+      currentPnl,
+      totalReturn,
+      isPositive: currentPnl >= 0,
+      zeroY,
     };
   }, [data, initialBalance, height]);
 
@@ -73,9 +126,45 @@ export function PerformanceChart({
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(value);
+  };
+
+  const formatPercent = (value: number) => {
+    const sign = value >= 0 ? '+' : '';
+    return `${sign}${value.toFixed(2)}%`;
+  };
+
+  const formatDateTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return date.toLocaleString([], {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  // Buy = Green, Sell = Red
+  const getActionColor = (action: string) => {
+    switch (action) {
+      case 'BUY_MARKET':
+        return '#22c55e'; // Green for buy
+      case 'SELL_MARKET':
+        return '#ef4444'; // Red for sell
+      default:
+        return '#6b7280'; // Gray for hold
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>, point: typeof chartData.points[0]) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setHoverPosition({
+      x: (point.x / 400) * rect.width,
+      y: point.y * (rect.height / height),
+    });
+    setHoveredPoint(point.data);
   };
 
   return (
@@ -83,22 +172,36 @@ export function PerformanceChart({
       {showLabels && (
         <div className="flex justify-between items-center mb-3">
           <div>
-            <h3 className="text-sm font-medium text-gray-400">Portfolio Performance</h3>
-            <p className="text-xl font-bold">{formatValue(chartData.currentValue)}</p>
+            <h3 className="text-sm font-medium text-gray-400">
+              {agentName || 'Agent'} Performance
+            </h3>
+            <div className="flex items-center gap-4">
+              <div>
+                <p className="text-xs text-gray-500">Portfolio</p>
+                <p className="text-lg font-bold">{formatValue(chartData.currentValue)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Realized P&L</p>
+                <p className={cn(
+                  "text-lg font-bold",
+                  chartData.isPositive ? "text-green-400" : "text-red-400"
+                )}>
+                  {chartData.currentPnl >= 0 ? '+' : ''}{formatValue(chartData.currentPnl)}
+                </p>
+              </div>
+            </div>
           </div>
           <div className="text-right">
             <p
               className={cn(
-                "text-lg font-semibold",
+                "text-2xl font-bold",
                 chartData.isPositive ? "text-green-400" : "text-red-400"
               )}
             >
-              {chartData.isPositive ? "+" : ""}
-              {chartData.returnPercent.toFixed(2)}%
+              {formatPercent(chartData.totalReturn)}
             </p>
             <p className="text-xs text-gray-500">
-              {chartData.isPositive ? "+" : ""}
-              {formatValue(chartData.totalPnl)}
+              {chartData.tradeData.length} trade{chartData.tradeData.length !== 1 ? 's' : ''}
             </p>
           </div>
         </div>
@@ -106,85 +209,200 @@ export function PerformanceChart({
 
       <div className="relative" style={{ height }}>
         <svg
-          viewBox={`0 0 100 ${height}`}
+          viewBox={`0 0 400 ${height}`}
           preserveAspectRatio="none"
           className="w-full h-full"
+          onMouseLeave={() => {
+            setHoveredPoint(null);
+            setHoverPosition(null);
+          }}
         >
-          <line
-            x1="0"
-            y1={height / 2}
-            x2="100"
-            y2={height / 2}
-            stroke="#374151"
-            strokeWidth="0.5"
-            strokeDasharray="2,2"
-          />
-
-          {data.length > 0 && (
+          {/* Zero line (breakeven) - centered */}
+          {chartData.tradeData.length > 0 && (
             <line
-              x1="0"
-              y1={
-                10 +
-                (height - 20) -
-                ((initialBalance - chartData.minValue) /
-                  (chartData.maxValue - chartData.minValue || 1)) *
-                  (height - 20)
-              }
-              x2="100"
-              y2={
-                10 +
-                (height - 20) -
-                ((initialBalance - chartData.minValue) /
-                  (chartData.maxValue - chartData.minValue || 1)) *
-                  (height - 20)
-              }
-              stroke="#6B7280"
-              strokeWidth="0.5"
+              x1="10"
+              y1={chartData.zeroY}
+              x2="390"
+              y2={chartData.zeroY}
+              stroke="#374151"
+              strokeWidth="1"
               strokeDasharray="4,4"
+              vectorEffect="non-scaling-stroke"
             />
           )}
 
-          {data.length > 1 && (
-            <polygon
-              points={`0,${height} ${chartData.points} 100,${height}`}
-              fill={chartData.isPositive ? "rgba(34, 197, 94, 0.1)" : "rgba(239, 68, 68, 0.1)"}
+          {/* Area fill */}
+          {chartData.tradeData.length > 1 && (
+            <path
+              d={chartData.areaD}
+              fill={chartData.isPositive ? "rgba(34, 197, 94, 0.08)" : "rgba(239, 68, 68, 0.08)"}
             />
           )}
 
-          {data.length > 1 && (
-            <polyline
-              points={chartData.points}
+          {/* Main line connecting trades */}
+          {chartData.tradeData.length > 1 && (
+            <path
+              d={chartData.pathD}
               fill="none"
               stroke={chartData.isPositive ? "#22c55e" : "#ef4444"}
-              strokeWidth="2"
+              strokeWidth="1.5"
               strokeLinecap="round"
               strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
             />
           )}
 
-          {data.length > 0 && (
-            <circle
-              cx="100"
-              cy={chartData.points.split(" ").pop()?.split(",")[1] || height / 2}
-              r="3"
-              fill={chartData.isPositive ? "#22c55e" : "#ef4444"}
-            />
-          )}
+          {/* Tick markers - BUY (green), SELL (red), HOLD (gray on zero line) */}
+          {chartData.points.map((point, index) => {
+            const isHovered = hoveredPoint === point.data;
+            const isHold = point.isHold;
+
+            return (
+              <g key={index}>
+                {/* Tick marker - green for buy, red for sell, gray for hold */}
+                <circle
+                  cx={point.x}
+                  cy={point.y}
+                  r={isHold ? (isHovered ? 5 : 2) : (isHovered ? 6 : 4)}
+                  fill={getActionColor(point.data.action)}
+                  stroke={isHovered ? "#fff" : "none"}
+                  strokeWidth={isHovered ? 1.5 : 0}
+                  className="cursor-pointer"
+                  onMouseMove={(e) => handleMouseMove(e, point)}
+                  vectorEffect="non-scaling-stroke"
+                />
+              </g>
+            );
+          })}
+
+          {/* Last trade marker highlight - only for actual trades */}
+          {(() => {
+            const lastTradePoint = chartData.points.filter(p => !p.isHold).slice(-1)[0];
+            if (!lastTradePoint) return null;
+            return (
+              <circle
+                cx={lastTradePoint.x}
+                cy={lastTradePoint.y}
+                r="8"
+                fill="none"
+                stroke={chartData.isPositive ? "#22c55e" : "#ef4444"}
+                strokeWidth="1.5"
+                opacity="0.6"
+                vectorEffect="non-scaling-stroke"
+              />
+            );
+          })()}
         </svg>
 
-        {data.length === 0 && (
+        {/* Tooltip */}
+        {hoveredPoint && hoverPosition && (() => {
+          const isHold = hoveredPoint.action === 'HOLD';
+          const tradeIndex = isHold ? -1 : chartData.tradeData.findIndex(d => d === hoveredPoint);
+          const tickIndex = chartData.allTicks.findIndex(d => d === hoveredPoint);
+          const portfolioValue = hoveredPoint.portfolio_value || hoveredPoint.balance || initialBalance;
+
+          const getActionLabel = (action: string) => {
+            switch (action) {
+              case 'BUY_MARKET': return 'BUY';
+              case 'SELL_MARKET': return 'SELL';
+              default: return 'HOLD';
+            }
+          };
+
+          const getActionBgColor = (action: string) => {
+            switch (action) {
+              case 'BUY_MARKET': return 'rgba(34, 197, 94, 0.2)';
+              case 'SELL_MARKET': return 'rgba(239, 68, 68, 0.2)';
+              default: return 'rgba(107, 114, 128, 0.2)';
+            }
+          };
+
+          return (
+            <div
+              className="absolute z-10 bg-gray-900 border border-gray-700 rounded-lg p-3 text-xs shadow-lg pointer-events-none min-w-[180px]"
+              style={{
+                left: Math.min(hoverPosition.x, 200),
+                top: Math.max(hoverPosition.y - 100, 0),
+                transform: hoverPosition.x > 150 ? 'translateX(-100%)' : 'none',
+              }}
+            >
+              <div className="flex items-center justify-between mb-2 border-b border-gray-700 pb-1">
+                <span className="font-medium text-gray-300">
+                  {formatDateTime(hoveredPoint.timestamp)}
+                </span>
+                <span
+                  className="px-2 py-0.5 rounded text-xs font-bold"
+                  style={{
+                    backgroundColor: getActionBgColor(hoveredPoint.action),
+                    color: getActionColor(hoveredPoint.action)
+                  }}
+                >
+                  {getActionLabel(hoveredPoint.action)}
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-500">Realized P&L:</span>
+                  <span className={cn("font-bold", hoveredPoint.realized_pnl >= 0 ? "text-green-400" : "text-red-400")}>
+                    {hoveredPoint.realized_pnl >= 0 ? '+' : ''}{formatValue(hoveredPoint.realized_pnl)}
+                  </span>
+                </div>
+                {!isHold && hoveredPoint.pnl_impact !== 0 && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-gray-500">This Trade:</span>
+                    <span className={hoveredPoint.pnl_impact >= 0 ? "text-green-400" : "text-red-400"}>
+                      {hoveredPoint.pnl_impact >= 0 ? '+' : ''}{formatValue(hoveredPoint.pnl_impact)}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-500">Portfolio:</span>
+                  <span className="text-white">{formatValue(portfolioValue)}</span>
+                </div>
+                {!isHold && hoveredPoint.size_usd && hoveredPoint.size_usd > 0 && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-gray-500">Trade Size:</span>
+                    <span className="text-gray-300">{formatValue(hoveredPoint.size_usd)}</span>
+                  </div>
+                )}
+              </div>
+              <div className="text-gray-500 text-[10px] mt-2 border-t border-gray-700 pt-1">
+                {isHold
+                  ? `Tick #${tickIndex + 1} of ${chartData.allTicks.length}`
+                  : `Trade #${tradeIndex + 1} of ${chartData.tradeData.length}`
+                }
+              </div>
+            </div>
+          );
+        })()}
+
+        {chartData.tradeData.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <p className="text-gray-500 text-sm">No trading data yet</p>
+            <p className="text-gray-500 text-sm">No trades executed yet</p>
           </div>
         )}
       </div>
 
-      {showLabels && data.length > 0 && (
+      {showLabels && chartData.tradeData.length > 0 && (
         <div className="flex justify-between mt-2 text-xs text-gray-500">
-          <span>{data[0]?.timestamp ? new Date(data[0].timestamp).toLocaleTimeString() : "-"}</span>
+          <span>{chartData.tradeData[0]?.timestamp ? formatDateTime(chartData.tradeData[0].timestamp) : "-"}</span>
+          <div className="flex gap-3 items-center">
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-green-500"></span>
+              Buy
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-red-500"></span>
+              Sell
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-gray-500"></span>
+              Hold
+            </span>
+          </div>
           <span>
-            {data[data.length - 1]?.timestamp
-              ? new Date(data[data.length - 1].timestamp).toLocaleTimeString()
+            {chartData.tradeData[chartData.tradeData.length - 1]?.timestamp
+              ? formatDateTime(chartData.tradeData[chartData.tradeData.length - 1].timestamp)
               : "-"}
           </span>
         </div>
@@ -209,20 +427,22 @@ export function PerformanceSparkline({
       return { points: "", isPositive: true };
     }
 
-    const values = data.map((d) => d.value);
-    const minValue = Math.min(...values);
-    const maxValue = Math.max(...values);
+    // Use portfolio_value for Y-axis
+    const values = data.map((d) => d.portfolio_value || d.balance || initialBalance);
+    const minValue = Math.min(initialBalance, ...values);
+    const maxValue = Math.max(initialBalance, ...values);
     const range = maxValue - minValue || 1;
 
     const pts = data
       .map((d, i) => {
+        const value = d.portfolio_value || d.balance || initialBalance;
         const x = (i / (data.length - 1)) * width;
-        const y = height - ((d.value - minValue) / range) * height;
+        const y = height - ((value - minValue) / range) * height;
         return `${x},${y}`;
       })
       .join(" ");
 
-    const currentValue = data[data.length - 1]?.value || initialBalance;
+    const currentValue = data[data.length - 1]?.portfolio_value || data[data.length - 1]?.balance || initialBalance;
     return {
       points: pts,
       isPositive: currentValue >= initialBalance,

@@ -57,6 +57,12 @@ export function RiskManagementInputs({
             <p className="text-xs text-gray-500 mt-1">% of position to close</p>
           </div>
         </div>
+        {stopLossClosePercent < 100 && (
+          <div className="bg-yellow-900/20 border border-yellow-500/30 rounded p-2 text-xs text-yellow-300">
+            <span className="font-medium">Partial Exit:</span> {stopLossClosePercent}% will close at -{stopLossPercent}% loss.
+            The remaining {100 - stopLossClosePercent}% will continue to be managed by the AI based on market conditions.
+          </div>
+        )}
       </div>
 
       <div className="bg-gray-700/30 rounded-lg p-4 space-y-4">
@@ -93,6 +99,12 @@ export function RiskManagementInputs({
             <p className="text-xs text-gray-500 mt-1">% of position to close</p>
           </div>
         </div>
+        {takeProfitClosePercent < 100 && (
+          <div className="bg-green-900/20 border border-green-500/30 rounded p-2 text-xs text-green-300">
+            <span className="font-medium">Partial Exit:</span> {takeProfitClosePercent}% will close at +{takeProfitPercent}% profit.
+            The remaining {100 - takeProfitClosePercent}% will continue to ride the trend, managed by the AI.
+          </div>
+        )}
       </div>
 
       <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 text-xs text-blue-300">

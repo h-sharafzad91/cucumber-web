@@ -5,7 +5,6 @@ export interface Agent {
   persona_config: PersonaConfig;
   worker_config: WorkerConfig;
   mmr: number;
-  is_active?: boolean;
   is_locked?: boolean;
   tick_interval?: number;
   leverage?: number;
@@ -60,6 +59,7 @@ export interface Round {
   current_pool_size?: number;
   max_participants?: number;
   scheduled_start_time?: string;
+  banner_url?: string;
 }
 
 export interface RoundSettings {

@@ -23,6 +23,13 @@ interface AgentCardProps {
   unrealizedPnl?: number;
   trades: number;
   currentPrice: number;
+  isCompleted?: boolean;
+  tradingPair?: string;
+}
+
+// Extract base asset from trading pair (e.g., "BTC/USDT" -> "BTC")
+function getBaseAsset(tradingPair: string): string {
+  return tradingPair.split('/')[0];
 }
 
 export function AgentCard({
@@ -35,26 +42,30 @@ export function AgentCard({
   realizedPnl,
   unrealizedPnl,
   trades,
-  currentPrice
+  currentPrice,
+  isCompleted = false,
+  tradingPair = 'BTC/USDT'
 }: AgentCardProps) {
   const [agent, setAgent] = useState<Agent | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
 
-  const ethPosition = positions.find(p => p.asset === 'ETH');
-  const ethValue = ethPosition ? ethPosition.size * currentPrice : 0;
-  const totalPortfolioValue = balance + ethValue;
+  const baseAsset = getBaseAsset(tradingPair);
+  const assetPosition = positions.find(p => p.asset === baseAsset);
+  const assetValue = assetPosition ? assetPosition.size * currentPrice : 0;
+  const totalPortfolioValue = balance + assetValue;
 
-  const calculatedUnrealizedPnl = ethPosition && ethPosition.avg_entry_price
-    ? (currentPrice - ethPosition.avg_entry_price) * ethPosition.size
+  const calculatedUnrealizedPnl = assetPosition && assetPosition.avg_entry_price
+    ? (currentPrice - assetPosition.avg_entry_price) * assetPosition.size
     : 0;
 
-  const displayUnrealizedPnl = unrealizedPnl !== undefined && unrealizedPnl !== null
-    ? unrealizedPnl
-    : calculatedUnrealizedPnl;
+  // When arena is completed, unrealized becomes realized (all positions closed)
+  const displayRealizedPnl = isCompleted
+    ? pnl  // Use total PnL as final realized when completed
+    : (realizedPnl !== undefined && realizedPnl !== null ? realizedPnl : 0);
 
-  const displayRealizedPnl = realizedPnl !== undefined && realizedPnl !== null
-    ? realizedPnl
-    : 0;
+  const displayUnrealizedPnl = isCompleted
+    ? 0  // No unrealized when completed
+    : (unrealizedPnl !== undefined && unrealizedPnl !== null ? unrealizedPnl : calculatedUnrealizedPnl);
 
   const returnPercent = initialBalance > 0 && displayRealizedPnl ? ((displayRealizedPnl / initialBalance) * 100) : 0;
 
@@ -121,26 +132,26 @@ export function AgentCard({
           <p className="font-medium">{formatUSD(balance)}</p>
         </div>
         <div>
-          <span className="text-gray-400">ETH</span>
+          <span className="text-gray-400">{baseAsset}</span>
           <p className="font-medium">
-            {ethPosition ? `${ethPosition.size.toFixed(4)} ETH` : "0 ETH"}
+            {assetPosition ? `${assetPosition.size.toFixed(4)} ${baseAsset}` : `0 ${baseAsset}`}
           </p>
-          {ethValue > 0 && (
-            <p className="text-xs text-gray-500">≈ {formatUSD(ethValue)}</p>
+          {assetValue > 0 && (
+            <p className="text-xs text-gray-500">≈ {formatUSD(assetValue)}</p>
           )}
         </div>
       </div>
 
       <div className="bg-gray-700/50 rounded p-2 text-sm">
         <div className="flex justify-between items-center">
-          <span className="text-gray-400 font-medium">P&L (Realized)</span>
+          <span className="text-gray-400 font-medium">{isCompleted ? 'Final P&L' : 'P&L (Realized)'}</span>
           <span className={cn("font-bold text-base", displayRealizedPnl >= 0 ? "text-green-400" : "text-red-400")}>
             {displayRealizedPnl >= 0 ? "+" : ""}{formatUSD(displayRealizedPnl)}
           </span>
         </div>
       </div>
 
-      {Math.abs(displayUnrealizedPnl) > 0.01 && (
+      {!isCompleted && Math.abs(displayUnrealizedPnl) > 0.01 && (
         <div className="bg-gray-700/50 rounded p-2 text-sm">
           <div className="flex justify-between items-center">
             <span className="text-gray-400 font-medium">Unrealized P&L</span>

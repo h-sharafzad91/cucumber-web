@@ -11,6 +11,7 @@ export default function CreateAgentPage() {
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [createdAgentName, setCreatedAgentName] = useState('');
+  const [wizardKey, setWizardKey] = useState(0);
   const { address } = useWallet();
 
   async function handleSubmit(data: any) {
@@ -33,6 +34,7 @@ export default function CreateAgentPage() {
   function handleCloseSuccess() {
     setShowSuccess(false);
     setCreatedAgentName('');
+    setWizardKey(prev => prev + 1); // Reset wizard to fresh state
   }
 
   return (
@@ -50,7 +52,7 @@ export default function CreateAgentPage() {
         </div>
       )}
 
-      <AgentWizardExtended onSubmit={handleSubmit} loading={loading} />
+      <AgentWizardExtended key={wizardKey} onSubmit={handleSubmit} loading={loading} />
 
       {showSuccess && (
         <SuccessModal agentName={createdAgentName} onClose={handleCloseSuccess} />

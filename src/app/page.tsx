@@ -4,17 +4,18 @@ import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { getRounds, getActiveRounds, getAgents, getParticipants, joinRound } from '@/lib/api';
 import { useWallet } from '@/hooks/useWallet';
-import { PrizePoolCard } from '@/components/arena/PrizePoolCard';
+import { LiveArenaSlider } from '@/components/arena/LiveArenaSlider';
+import { ArenaListCard } from '@/components/arena/ArenaListCard';
 import type { Round } from '@/types';
 
 interface Agent {
   id: string;
   name: string;
-  is_active?: boolean;
   tick_interval?: number;
 }
 
 type StatusFilter = 'all' | 'pending' | 'active' | 'completed';
+type ArenaTypeFilter = 'all' | 'tournament' | 'contest';
 type SortBy = 'start_time' | 'prize_pool' | 'buy_in';
 
 function formatTickInterval(seconds: number): string {
@@ -40,6 +41,7 @@ export default function Home() {
   const [availableAgents, setAvailableAgents] = useState<Agent[]>([]);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [arenaTypeFilter, setArenaTypeFilter] = useState<ArenaTypeFilter>('all');
 
   // Check if selected agent is compatible with the arena's tick interval range
   const selectedAgentCompatibility = useMemo(() => {
@@ -76,6 +78,10 @@ export default function Home() {
       rounds = rounds.filter(r => r.status === statusFilter);
     }
 
+    if (arenaTypeFilter !== 'all') {
+      rounds = rounds.filter(r => r.arena_type === arenaTypeFilter);
+    }
+
     rounds.sort((a, b) => {
       let aVal: number, bVal: number;
       switch (sortBy) {
@@ -95,10 +101,14 @@ export default function Home() {
     });
 
     return rounds;
-  }, [allRounds, statusFilter, sortBy, sortOrder]);
+  }, [allRounds, statusFilter, arenaTypeFilter, sortBy, sortOrder]);
 
   const upcomingRounds = filteredRounds.filter(r => r.status === 'pending');
-  const completedRounds = filteredRounds.filter(r => r.status === 'completed').slice(0, 5);
+  const liveRounds = filteredRounds.filter(r => r.status === 'active');
+  const completedRounds = filteredRounds.filter(r => r.status === 'completed');
+
+  // When "all" filter is selected, show all rounds together
+  const showAllRounds = statusFilter === 'all';
 
   async function fetchData() {
     try {
@@ -120,6 +130,13 @@ export default function Home() {
 
   useEffect(() => {
     fetchData();
+
+    // Auto-refresh every 30 seconds to keep arena list up to date
+    const interval = setInterval(() => {
+      fetchData();
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, [address]);
 
   async function openJoinModal(round: Round) {
@@ -173,58 +190,13 @@ export default function Home() {
 
       {activeRounds.length > 0 && (
         <div>
-          <h2 className="text-xl font-semibold mb-4">Live Arenas</h2>
-          <div className="space-y-4">
-            {activeRounds.map((activeRound) => (
-              <div key={activeRound.id} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 bg-gray-800 rounded-lg p-6 border border-primary-500">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <span className="text-primary-400 text-sm font-medium">LIVE NOW</span>
-                      <h2 className="text-2xl font-bold">{activeRound.name}</h2>
-                    </div>
-                    <Link
-                      href={`/arena/${activeRound.id}`}
-                      className="bg-primary-600 hover:bg-primary-700 px-6 py-2 rounded-lg font-medium transition"
-                    >
-                      Watch Live
-                    </Link>
-                  </div>
-                  <div className="grid grid-cols-3 gap-4 text-sm">
-                    <div>
-                      <span className="text-gray-400">Type</span>
-                      <p className="font-medium capitalize">{activeRound.arena_type || 'Tournament'}</p>
-                    </div>
-                    <div>
-                      <span className="text-gray-400">Participants</span>
-                      <p className="font-medium">
-                        {activeRound.current_participants || 0}
-                        {activeRound.max_participants ? ` / ${activeRound.max_participants}` : ''}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-gray-400">Started</span>
-                      <p className="font-medium">
-                        {activeRound.start_time
-                          ? new Date(activeRound.start_time).toLocaleTimeString()
-                          : '-'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <PrizePoolCard
-                  prizePoolSeed={activeRound.prize_pool_seed}
-                  buyInFee={activeRound.buy_in_fee}
-                  currentParticipants={activeRound.current_participants}
-                  maxParticipants={activeRound.max_participants}
-                  protocolFeePercent={activeRound.protocol_fee_percent}
-                  currentPoolSize={activeRound.current_pool_size}
-                  payoutStructure={activeRound.payout_structure}
-                />
-              </div>
-            ))}
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">Live Arenas</h2>
+            {activeRounds.length > 1 && (
+              <span className="text-sm text-gray-400">{activeRounds.length} arenas live</span>
+            )}
           </div>
+          <LiveArenaSlider arenas={activeRounds} autoPlayInterval={6000} />
         </div>
       )}
 
@@ -238,6 +210,16 @@ export default function Home() {
           <option value="pending">Open</option>
           <option value="active">Live</option>
           <option value="completed">Finished</option>
+        </select>
+
+        <select
+          value={arenaTypeFilter}
+          onChange={(e) => setArenaTypeFilter(e.target.value as ArenaTypeFilter)}
+          className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm"
+        >
+          <option value="all">All Types</option>
+          <option value="tournament">Tournament</option>
+          <option value="contest">Contest</option>
         </select>
 
         <select
@@ -258,42 +240,39 @@ export default function Home() {
         </button>
       </div>
 
-      {upcomingRounds.length > 0 && (
+      {/* All Arenas Section - shown when 'all' filter is selected */}
+      {showAllRounds && filteredRounds.length > 0 && (
         <div>
-          <h2 className="text-xl font-semibold mb-4">Join an Arena</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {upcomingRounds.map((round) => (
-              <div
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">All Arenas</h2>
+            <span className="text-sm text-gray-400">{filteredRounds.length} total</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {filteredRounds.map((round) => (
+              <ArenaListCard
                 key={round.id}
-                className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-primary-500/50 transition"
-              >
-                <h3 className="text-lg font-semibold mb-2">{round.name}</h3>
-                <div className="space-y-2 text-sm mb-4">
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Entry Fee:</span>
-                    <span className="font-medium">${round.buy_in_fee?.toFixed(2) || '0.00'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Prize Pool:</span>
-                    <span className="text-primary-400 font-medium">
-                      ${round.current_pool_size?.toFixed(2) || round.prize_pool_seed?.toFixed(2) || '0.00'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Participants:</span>
-                    <span>
-                      {round.current_participants || 0}
-                      {round.max_participants ? ` / ${round.max_participants}` : ''}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => openJoinModal(round)}
-                  className="w-full bg-primary-600 hover:bg-primary-700 px-4 py-2 rounded-lg font-medium transition"
-                >
-                  Join Arena
-                </button>
-              </div>
+                arena={round}
+                onJoin={round.status === 'pending' ? openJoinModal : undefined}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Upcoming Arenas - shown when filter is not 'all' */}
+      {!showAllRounds && upcomingRounds.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">Join an Arena</h2>
+            <span className="text-sm text-gray-400">{upcomingRounds.length} upcoming</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {upcomingRounds.map((round) => (
+              <ArenaListCard
+                key={round.id}
+                arena={round}
+                onJoin={openJoinModal}
+              />
             ))}
           </div>
         </div>
@@ -325,14 +304,20 @@ export default function Home() {
         </Link>
       </div>
 
-      {completedRounds.length > 0 && (
+      {/* Recent Results - only show when not in 'all' mode */}
+      {!showAllRounds && completedRounds.length > 0 && (
         <div>
-          <h2 className="text-xl font-semibold mb-4">Recent Results</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">Recent Results</h2>
+            <span className="text-sm text-gray-400">{completedRounds.length} completed</span>
+          </div>
           <div className="bg-gray-800 rounded-lg overflow-hidden">
             <table className="w-full">
               <thead className="bg-gray-750">
                 <tr>
                   <th className="text-left px-4 py-3 text-sm text-gray-400">Arena</th>
+                  <th className="text-left px-4 py-3 text-sm text-gray-400">Pair</th>
+                  <th className="text-left px-4 py-3 text-sm text-gray-400">Type</th>
                   <th className="text-left px-4 py-3 text-sm text-gray-400">Prize Pool</th>
                   <th className="text-left px-4 py-3 text-sm text-gray-400">Participants</th>
                   <th className="text-left px-4 py-3 text-sm text-gray-400">Completed</th>
@@ -340,11 +325,25 @@ export default function Home() {
                 </tr>
               </thead>
               <tbody>
-                {completedRounds.map((round) => (
-                  <tr key={round.id} className="border-t border-gray-700">
-                    <td className="px-4 py-3">{round.name}</td>
-                    <td className="px-4 py-3 text-primary-400">
-                      ${round.current_pool_size?.toFixed(2) || '0.00'}
+                {completedRounds.slice(0, statusFilter === 'completed' ? undefined : 5).map((round) => (
+                  <tr key={round.id} className="border-t border-gray-700 hover:bg-gray-750/50">
+                    <td className="px-4 py-3 font-medium">{round.name}</td>
+                    <td className="px-4 py-3">
+                      <span className="bg-gray-700/50 px-2 py-1 rounded text-sm">
+                        {round.trading_pair || 'BTC/USDT'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        round.arena_type === 'contest'
+                          ? 'bg-orange-500/20 text-orange-400'
+                          : 'bg-blue-500/20 text-blue-400'
+                      }`}>
+                        {round.arena_type === 'contest' ? 'Contest' : 'Tournament'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-primary-400 font-medium">
+                      ${(round.current_pool_size || 0).toLocaleString()}
                     </td>
                     <td className="px-4 py-3">{round.current_participants || 0}</td>
                     <td className="px-4 py-3 text-gray-400">
@@ -355,7 +354,7 @@ export default function Home() {
                     <td className="px-4 py-3 text-right">
                       <Link
                         href={`/arena/${round.id}`}
-                        className="text-primary-400 hover:text-primary-300 text-sm"
+                        className="text-primary-400 hover:text-primary-300 text-sm font-medium"
                       >
                         View Results
                       </Link>
@@ -381,6 +380,10 @@ export default function Home() {
 
             <div className="bg-gray-700/50 rounded-lg p-4 mb-4 space-y-2">
               <div className="flex justify-between text-sm">
+                <span className="text-gray-400">Trading Pair:</span>
+                <span className="font-medium text-primary-400">{showJoinModal.trading_pair || 'BTC/USDT'}</span>
+              </div>
+              <div className="flex justify-between text-sm">
                 <span className="text-gray-400">Entry Fee:</span>
                 <span className="font-medium">${showJoinModal.buy_in_fee?.toFixed(2) || '0.00'}</span>
               </div>
@@ -388,6 +391,12 @@ export default function Home() {
                 <span className="text-gray-400">Prize Pool:</span>
                 <span className="text-primary-400 font-medium">
                   ${showJoinModal.current_pool_size?.toFixed(2) || '0.00'}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">Initial Balance:</span>
+                <span className="font-medium">
+                  ${showJoinModal.settings?.initial_balance?.toLocaleString() || '10,000'}
                 </span>
               </div>
               <div className="flex justify-between text-sm">

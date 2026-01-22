@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { useArena } from "@/hooks/useArena";
 import { useArenaStore } from "@/stores/arena-store";
 import { useWallet } from "@/hooks/useWallet";
-import { getAgents } from "@/lib/api";
+import { getAgents, getAgentPerformanceHistory, type PerformanceDataPoint } from "@/lib/api";
 import { AgentCard } from "@/components/arena/AgentCard";
 import { AutoTradeControl } from "@/components/arena/AutoTradeControl";
 import { PerformanceChart } from "@/components/arena/PerformanceChart";
@@ -58,11 +58,12 @@ export default function ArenaPage() {
   const roundId = params.roundId as string;
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [userAgentIds, setUserAgentIds] = useState<string[]>([]);
+  const [performanceData, setPerformanceData] = useState<Record<string, PerformanceDataPoint[]>>({});
   const { address } = useWallet();
 
   const { loading, error } = useArena(roundId);
 
-  const { round, currentPrice, tickNumber, participants, trades } =
+  const { round, currentPrice, tickNumber, participants, trades, connected } =
     useArenaStore();
 
   const effectiveEndTime = useMemo(() => {
@@ -107,6 +108,32 @@ export default function ArenaPage() {
     return trades.filter((t) => userAgentIds.includes(t.agent_id) && t.action !== 'HOLD');
   }, [trades, userAgentIds]);
 
+  // Fetch performance history for each user's agent
+  const fetchPerformanceData = useCallback(async () => {
+    if (filteredParticipants.length === 0) return;
+
+    const newData: Record<string, PerformanceDataPoint[]> = {};
+
+    await Promise.all(
+      filteredParticipants.map(async (p) => {
+        try {
+          const result = await getAgentPerformanceHistory(roundId, p.agent_id);
+          newData[p.agent_id] = result.performance;
+        } catch (err) {
+          console.error(`Failed to fetch performance for ${p.agent_id}:`, err);
+          newData[p.agent_id] = [];
+        }
+      })
+    );
+
+    setPerformanceData(newData);
+  }, [roundId, filteredParticipants]);
+
+  // Fetch performance data on mount and when trades change
+  useEffect(() => {
+    fetchPerformanceData();
+  }, [fetchPerformanceData, trades.length]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -150,6 +177,12 @@ export default function ArenaPage() {
                     LIVE
                   </span>
                 )}
+                {connected && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-300" title="Real-time updates active">
+                    <span className="w-2 h-2 bg-green-500 rounded-full" />
+                    SYNC
+                  </span>
+                )}
               </div>
               <p className="text-sm text-gray-400 mt-1">
                 {isContest
@@ -159,7 +192,7 @@ export default function ArenaPage() {
               </p>
             </div>
           </div>
-          <LiveMarketPrice roundId={roundId} initialPrice={currentPrice} />
+          <LiveMarketPrice roundId={roundId} initialPrice={currentPrice} tradingPair={round?.trading_pair || 'BTC/USDT'} />
         </div>
 
         <div className="grid grid-cols-4 gap-4 mt-4">
@@ -231,17 +264,10 @@ export default function ArenaPage() {
           {filteredParticipants.slice(0, 2).map((p) => (
             <PerformanceChart
               key={p.agent_id}
-              data={trades
-                .filter((t) => t.agent_id === p.agent_id && t.status === "confirmed")
-                .slice(0, 20)
-                .reverse()
-                .map((t, i, arr) => ({
-                  timestamp: t.created_at,
-                  value: p.initial_balance + (p.total_pnl * (i + 1)) / Math.max(arr.length, 1),
-                  pnl: (p.total_pnl * (i + 1)) / Math.max(arr.length, 1),
-                }))}
+              data={performanceData[p.agent_id] || []}
               initialBalance={p.initial_balance}
-              height={100}
+              agentName={p.agent_name || p.agent_id.slice(0, 8)}
+              height={160}
               className="bg-gray-800/50"
             />
           ))}
@@ -306,6 +332,8 @@ export default function ArenaPage() {
                   unrealizedPnl={p.unrealized_pnl}
                   trades={p.total_trades}
                   currentPrice={currentPrice}
+                  isCompleted={round?.status === 'completed'}
+                  tradingPair={round?.trading_pair || 'BTC/USDT'}
                 />
               ))
           ) : (
@@ -322,6 +350,8 @@ export default function ArenaPage() {
                 unrealizedPnl={p.unrealized_pnl}
                 trades={p.total_trades}
                 currentPrice={currentPrice}
+                isCompleted={round?.status === 'completed'}
+                tradingPair={round?.trading_pair || 'BTC/USDT'}
               />
             ))
           )}
@@ -340,7 +370,7 @@ export default function ArenaPage() {
         </div>
 
         <div className="col-span-4 space-y-6">
-          <LiveLeaderboard roundId={roundId} />
+          <LiveLeaderboard roundId={roundId} isCompleted={round?.status === 'completed'} participants={participants} />
 
           {isTournament && round?.status === 'active' && (
             <BettingPanel

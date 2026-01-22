@@ -6,9 +6,10 @@ import { useWebSocket, type TickUpdate } from '@/hooks/useWebSocket';
 interface LiveMarketPriceProps {
   roundId: string;
   initialPrice?: number;
+  tradingPair?: string;
 }
 
-export function LiveMarketPrice({ roundId, initialPrice = 0 }: LiveMarketPriceProps) {
+export function LiveMarketPrice({ roundId, initialPrice = 0, tradingPair = 'BTC/USDT' }: LiveMarketPriceProps) {
   const [price, setPrice] = useState<number>(initialPrice);
   const [prevPrice, setPrevPrice] = useState<number>(initialPrice);
   const [tickNumber, setTickNumber] = useState<number>(0);
@@ -47,7 +48,7 @@ export function LiveMarketPrice({ roundId, initialPrice = 0 }: LiveMarketPricePr
   return (
     <div className="bg-gray-800 rounded-lg p-6">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm text-gray-400">ETH/USDC</h3>
+        <h3 className="text-sm text-gray-400">{tradingPair}</h3>
         <div className="flex items-center gap-2">
           <div
             className={`w-2 h-2 rounded-full ${

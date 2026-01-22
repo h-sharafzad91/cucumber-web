@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useWebSocket, type LeaderboardUpdate } from '@/hooks/useWebSocket';
 import { getLeaderboard } from '@/lib/api';
 
@@ -14,8 +14,20 @@ interface LeaderboardEntry {
   effective_tick_interval?: number;
 }
 
+interface Participant {
+  agent_id: string;
+  agent_name?: string;
+  initial_balance: number;
+  current_balance: number;
+  total_pnl: number;
+  total_trades: number;
+  effective_tick_interval?: number;
+}
+
 interface LiveLeaderboardProps {
   roundId: string;
+  isCompleted?: boolean;
+  participants?: Participant[];
 }
 
 function formatTickInterval(seconds: number): string {
@@ -30,7 +42,7 @@ function formatTickInterval(seconds: number): string {
   return `${seconds}s`;
 }
 
-export function LiveLeaderboard({ roundId }: LiveLeaderboardProps) {
+export function LiveLeaderboard({ roundId, isCompleted = false, participants = [] }: LiveLeaderboardProps) {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -60,6 +72,27 @@ export function LiveLeaderboard({ roundId }: LiveLeaderboardProps) {
     onLeaderboard: handleLeaderboardUpdate,
   });
 
+  // When completed, use participants data (final state). When live, use leaderboard API data
+  const displayData = useMemo(() => {
+    // For completed arenas, always use participants data as source of truth for final PnL
+    if (isCompleted || leaderboard.length === 0) {
+      return participants
+        .map((p) => ({
+          agent_id: p.agent_id,
+          agent_name: p.agent_name || p.agent_id.slice(0, 8),
+          total_pnl: p.total_pnl,
+          current_balance: p.current_balance,
+          total_trades: p.total_trades,
+          effective_tick_interval: p.effective_tick_interval,
+          rank: 0,
+        }))
+        .sort((a, b) => b.total_pnl - a.total_pnl)
+        .map((entry, index) => ({ ...entry, rank: index + 1 }));
+    }
+    // For live arenas, use leaderboard API/WebSocket data
+    return leaderboard;
+  }, [leaderboard, participants, isCompleted]);
+
   if (loading) {
     return (
       <div className="bg-gray-800 rounded-lg p-6">
@@ -71,7 +104,7 @@ export function LiveLeaderboard({ roundId }: LiveLeaderboardProps) {
   return (
     <div className="bg-gray-800 rounded-lg">
       <div className="flex items-center justify-between p-4 border-b border-gray-700">
-        <h3 className="text-lg font-semibold">Live Leaderboard</h3>
+        <h3 className="text-lg font-semibold">{isCompleted ? 'Final Leaderboard' : 'Live Leaderboard'}</h3>
         <div className="flex items-center gap-2">
           <div
             className={`w-2 h-2 rounded-full ${
@@ -97,7 +130,7 @@ export function LiveLeaderboard({ roundId }: LiveLeaderboardProps) {
             </tr>
           </thead>
           <tbody>
-            {leaderboard.map((entry, index) => (
+            {displayData.map((entry, index) => (
               <tr
                 key={entry.agent_id}
                 className="border-t border-gray-700 hover:bg-gray-750 transition"
@@ -126,11 +159,11 @@ export function LiveLeaderboard({ roundId }: LiveLeaderboardProps) {
                   {entry.effective_tick_interval ? formatTickInterval(entry.effective_tick_interval) : '--'}
                 </td>
                 <td className="px-4 py-3 text-right text-gray-400">
-                  {entry.total_trades}
+                  {entry.total_trades || 0}
                 </td>
               </tr>
             ))}
-            {leaderboard.length === 0 && (
+            {displayData.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
                   No participants yet

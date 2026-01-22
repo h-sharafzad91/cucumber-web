@@ -158,8 +158,10 @@ export function PerformanceChart({
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>, point: typeof chartData.points[0]) => {
-    const rect = e.currentTarget.getBoundingClientRect();
+  const handleMouseMove = (e: React.MouseEvent<SVGElement>, point: typeof chartData.points[0]) => {
+    const svg = e.currentTarget.closest('svg');
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
     setHoverPosition({
       x: (point.x / 400) * rect.width,
       y: point.y * (rect.height / height),

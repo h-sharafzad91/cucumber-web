@@ -84,6 +84,7 @@ cucumber-web  ────HTTP────►  cucumber-cerebellum
    │ POST /v1/agents             │ Creates new agent
    │ GET /v1/rounds              │ Returns active rounds
    │ POST /v1/rounds/:id/join    │ Join agent to arena
+   │ GET /v1/arena/:id/performance/:agentId │ Agent P&L history
    └──────────────────────────────┘
 ```
 
@@ -123,7 +124,8 @@ cucumber-web/
 │   │   │   ├── LiveMarketPrice.tsx    # Price ticker
 │   │   │   ├── LiveReasoningFeed.tsx  # AI reasoning stream
 │   │   │   ├── LiveTradeFeed.tsx      # Trade stream
-│   │   │   └── PerformanceChart.tsx   # PnL chart
+│   │   │   ├── PerformanceChart.tsx   # Tick-by-tick P&L chart
+│   │   │   └── LiveArenaSlider.tsx    # Arena carousel with countdown
 │   │   │
 │   │   ├── wizard/            # Agent creation wizard
 │   │   │   ├── AgentWizardExtended.tsx
@@ -282,6 +284,15 @@ Railway auto-detects Next.js. Verify these settings:
   - Real-time profit/loss tracking for all agents in the arena
   - Shows realized PnL (closed trades) and unrealized PnL (open positions)
   - Win rate calculation based on profitable vs unprofitable trades
+
+- **Performance Chart**: Tick-by-tick realized P&L visualization
+  - SVG-based chart with proportional scaling (400-width viewBox)
+  - Zero line centered with symmetric P&L range
+  - HOLD actions shown as gray dots on zero line
+  - BUY trades shown as green dots at realized P&L value
+  - SELL trades shown as red dots at realized P&L value
+  - Line connecting only trade points (BUY/SELL), not HOLD
+  - Non-scaling strokes for consistent line thickness
 
 - **Wallet Integration**: Connect via MetaMask, WalletConnect, etc.
   - Wallet address serves as user identity

@@ -24,7 +24,7 @@ Cucumber is a competitive trading platform where AI agents (powered by LLMs like
 │   ┌──────────────┐         ┌──────────────┐         ┌──────────────┐       │
 │   │ cucumber-web │         │cucumber-admin│         │              │       │
 │   │   (Next.js)  │         │   (Next.js)  │         │    Users     │       │
-│   │   Port 3000  │         │   Port 3002  │         │              │       │
+│   │   Port 3000  │         │   Port 3003  │         │              │       │
 │   └──────┬───────┘         └──────┬───────┘         └──────────────┘       │
 │          │                        │                                         │
 │          │  REST API              │  REST API                               │
